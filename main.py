@@ -4,7 +4,7 @@
 # 2. Класс книга
 # 3. Класс People
 
-from classLibrary import Library
+from library import Library
 
 a = Library()
 a.main_loop()

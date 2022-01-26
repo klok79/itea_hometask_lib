@@ -2,20 +2,20 @@
 # - ???
 # Методы:
 # ???
-class People:
-    def __init__(self, id, name, birthday):
+class Reader:
+    def __init__(self, uin, name, birthday):
         """
 
         :param reader_name:
         :param birthday:
         :param book_list:
         """
-        self.id = id
+        self.uin = uin
         self.name = name
         self.birthday = birthday
 
 
     def __str__(self):
-        return f"id: {self.id}, ім'я: {self.name}, дата народження: {self.birthday}"
+        return f"id: {self.uin}, ім'я: {self.name}, дата народження: {self.birthday}"
 
 
