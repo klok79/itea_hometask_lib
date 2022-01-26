@@ -13,8 +13,8 @@
 # - Отсортировать список книг по названию, автору, году издания (lambda будет плюсом)
 
 
-from lib_utils.book import Book
-from lib_utils.reader import Reader
+from LSNLibrary.lib_utils.book import Book
+from LSNLibrary.lib_utils.reader import Reader
 from os import system
 from datetime import datetime
 

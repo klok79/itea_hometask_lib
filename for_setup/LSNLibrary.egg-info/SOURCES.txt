@@ -1,0 +1,9 @@
+setup.py
+LSNLibrary/library.py
+LSNLibrary.egg-info/PKG-INFO
+LSNLibrary.egg-info/SOURCES.txt
+LSNLibrary.egg-info/dependency_links.txt
+LSNLibrary.egg-info/top_level.txt
+LSNLibrary/lib_utils/__init__.py
+LSNLibrary/lib_utils/book.py
+LSNLibrary/lib_utils/reader.py
