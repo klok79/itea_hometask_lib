@@ -15,6 +15,8 @@
 
 from lib_utils.book import Book
 from lib_utils.reader import Reader
+from lib_utils.tools import LibTools as tls
+from lib_utils.storage_fts import FileTabsStorage
 from os import system
 from datetime import datetime
 
@@ -30,8 +32,8 @@ class Library:
         self.head_len = 65
         self.pt_tab = '\t'
         self.pt_ln = '\n'
-        self.list_book = self.load_list_book_from_file()
-        self.list_reader = self.load_list_reader_from_file()
+        self.list_book = self.load_list_book()
+        self.list_reader = self.load_list_reader()
         self._booklist_saved = True
         self._readerlist_saved = True
 
@@ -67,98 +69,6 @@ class Library:
         """
         if condition:
             system('cls')
-
-    # ---------------------------------------------------------------------------------------------------------------- #
-    @staticmethod
-    def check_value(value: str):
-        """
-         Метод перевіряє, чи value містить якісь дані. Застосовується після функції input
-
-        :param value: текстове значення, що підлягає перевірці.
-        :return: Введене значення без ведучих та ведених пробілів, якщо воно є, або False
-        """
-        value = value.strip()
-        return value if value != '' else False
-
-    # ---------------------------------------------------------------------------------------------------------------- #
-    @staticmethod
-    def check_date_str(s_date: str):
-        """
-        Метод перевіряє коректність введеної текстом дати. Застосовується після функції input
-
-        :param s_date: Текстова дата, що підлягає перевірці
-        :return: Введене значення дати переформатоване через крапку, якщо воно є, або False
-        """
-        d_arr = s_date.split('.')
-        if len(d_arr) != 3:
-            d_arr = s_date.split('/')
-            if len(d_arr) != 3:
-                return False
-        day, month, year = d_arr
-        try:
-            dt = datetime(int(year), int(month), int(day))
-            return dt.strftime('%d.%m.%Y')
-        except ValueError:
-            return False
-
-    # ---------------------------------------------------------------------------------------------------------------- #
-    @staticmethod
-    def check_uin(uin: str, only_positive: bool = True):
-        """
-        Метод перевіряє коректність uin (число, але не нуль).  Застосовується після зчитування даних з файлу
-
-        :param uin: Унікальний номер книги/читача, що підлягає перевірці.
-        :param only_positive: Ознака того, що очікуються тільки додатні значення номеру
-        :return: Введене число, якщо воно відповідає умовам, або False
-        """
-        uin = uin.strip()
-        try:
-            uin = int(uin)
-        except ValueError:
-            uin = 0
-        if only_positive:
-            return uin if uin > 0 else False
-        else:
-            return False if uin == 0 else uin
-
-    # ---------------------------------------------------------------------------------------------------------------- #
-    @staticmethod
-    def check_pulish_year(publish_year: str, max_year: int = None, min_year: int = 0):
-        """
-        Метод перевіряє корректність введеного року публікації.
-        Застосовується після функції input / зчитування даних з файлу
-
-        :param publish_year: Рік, що підлягає перевірці.
-        :param max_year: Максимально коректний рік. По замовчанню - поточний
-        :param min_year: Мінімально коректний рік. По замовчанню - нульовий
-        :return: Введене число, якщо воно відповідає умовам, або False
-        """
-        publish_year = publish_year.strip()
-        if publish_year.isdigit():
-            publish_year = int(publish_year)
-            if max_year is None:
-                max_year = datetime.now().year
-            if (publish_year > min_year) and (publish_year <= max_year):
-                return publish_year
-        return False
-
-    # ---------------------------------------------------------------------------------------------------------------- #
-    @staticmethod
-    def _push_load_error_info(err_str: str, prompt: str, err_count: int):
-        """
-        Допоміжний метод нарощування тексту помилки в методах завантаження з файлів.
-        використовується методами load_list_book_from_file та load_list_reader_from_file.
-        Вставляє кому перед не першою помилкою та нарощує текст помилки.
-        Також збільшує лічильник помилок в записі
-
-        :param err_str: Результуючий текст, що нарощується
-        :param prompt:  Текст, що буде доданий до результуючого тексту
-        :param err_count: Кількість частин нарощування (кількість помилок)
-        :return: Текст err_str з доданим до нього через коvу тексту prompt.
-        """
-        if err_count > 0:
-            err_str = err_str + ','
-        return f'{err_str} {prompt}', err_count + 1
 
     # ---------------------------------------------------------------------------------------------------------------- #
     def show_resume_action(self, prompt: str, bottom_len: int = None):
@@ -201,24 +111,6 @@ class Library:
             if reader.uin == reader_uin:
                 return pos
             pos += 1
-
-    # ---------------------------------------------------------------------------------------------------------------- #
-    def _is_void_record(self, uin: int, fields: list) -> bool:
-        """
-        Метод перевіряє, чи є запис, зчитаний з файлу порожнім. Коректний порожній запис у файлі реєстру книг та
-        читачів мічтить коректне uin, а всі решта полів заповнені порожній значенням (тут порожнє значення це: "-----")
-        Використовується методами load_list_book_from_file та load_list_reader_from_file
-        :param uin: Унікальний номер, що перевіряється
-        :param fields: Перелік всіх полів крім uin окремого запису зчитаного з файлу
-        :return: Ознаку того, чи є запис порожнім
-        """
-        succ = False
-        if uin:
-            for i in range(1, len(fields)):
-                succ = fields[i] == self._void_value
-                if not succ:
-                    break
-        return succ
 
     # ---------------------------------------------------------------------------------------------------------------- #
     def select_menu(self, title: str = None, menu_width: int = None, cls: bool = True, menu: dict = None,
@@ -321,17 +213,17 @@ class Library:
         Library.clear_screen()
         print(self.get_table_head('Додавання нової книги в бібліотеку', self.head_len, True))
         value = input('Введіть повністю наву книги: ')
-        title = Library.check_value(value)
+        title = tls.check_value(value)
         if not title:
             self.show_resume_action('Назва книги не введена. Книга не додана.')
             return
         value = input("Введіть автора книги: ")
-        author = Library.check_value(value)
+        author = tls.check_value(value)
         if not author:
             self.show_resume_action('Автор не введений. Книга не додана.')
             return
         value = input("Введіть рік публікації книги:")
-        publ_year = Library.check_pulish_year(value)
+        publ_year = tls.check_pulish_year(value)
         if not publ_year:
             s_err = 'не введений' if value == "" else f'[{value}] введений не корректно'
             self.show_resume_action(f'Рік публікації {s_err}. Книга не додана.')
@@ -352,12 +244,12 @@ class Library:
         Library.clear_screen()
         print(self.get_table_head('Реєстрація нового читача в бібліотеці', self.head_len, True))
         value = input("Введіть повне ім'я читача (ПІБ, титул, тощо): ")
-        reader_name = Library.check_value(value)
+        reader_name = tls.check_value(value)
         if not reader_name:
             self.show_resume_action("Ім'я читача не введене. Реєстрація відхилена.")
             return
         value = input("Введіть дату народження читача:")
-        birthday = Library.check_date_str(value)
+        birthday = tls.check_date_str(value)
         if not birthday:
             s_err = 'не введена' if value == '' else f'[{value}] введена не коректно'
             self.show_resume_action(f'Дата дня народження {s_err}. Реєстрація відхилена.')
@@ -429,107 +321,44 @@ class Library:
         }
         value = self.select_menu(title='РОБОТА З ФАЙЛАМИ ДАНИХ', menu=menu, question='Оберіть необхідну дію')
         if value is not None:
-            file_methods = [self.save_list_book_to_file,
-                            self.load_list_book_from_file,
-                            self.save_list_reader_to_file,
-                            self.load_list_reader_from_file]
+            file_methods = [self.save_list_book,
+                            self.load_list_book,
+                            self.save_list_reader,
+                            self.load_list_reader]
             file_methods[int(value) - 1]()
             self.show_resume_action('Файлова операція закінчена')
         else:
             self.show_resume_action('Дія не обрана. Операція відмінена')
 
     # ---------------------------------------------------------------------------------------------------------------- #
-    def save_list_book_to_file(self):
+    def save_list_book(self):
         """
          Метод зберігає весь перелік книг в текстовий файл book_list.txt в директорії проекту
          В разі успішного збереження - встановлює ознаку збереженості переліку книг
 
         :return: Нічого не вертає
         """
-        # ---------------------------------------------------------------------------------- #
-        def push_book_record_to_list(x_book: Book = None):
-            """
-            Допоміжна фінкція скорочує запис коду функції save_list_book_to_file, в якій і знаходиться.
-            Формує та накопичує рядки даних книг
+        connector = FileTabsStorage(self.pt_tab,self.pt_ln, self._void_value)
+        x_list = connector.fetch_dict_list(self.list_book, self.max_book_uin, Book)
+        if connector.dump(self._booklist_file_name, x_list, Book):
+            self._booklist_saved = True
 
-            :param x_book: об'єкт книги, інформація з якого переноситься в перелік, для порожнього запису - None
-            :return: Нічого не вертає. цільовий перелік в нелокальній змінній
-            """
-            if x_book:
-                record = f'{book.uin}{self.pt_tab}{book.title}{self.pt_tab}{book.author}{self.pt_tab}' \
-                         f'{book.publishing_year}{self.pt_tab}{book.reader_uin}{self.pt_ln}'
-            else:
-                record = f'{self.max_book_uin}{self.pt_tab}{self._void_value}{self.pt_tab}{self._void_value}' \
-                         f'{self.pt_tab}{self._void_value}{self.pt_tab}{self._void_value}{self.pt_ln}'
-            record = record.encode('UTF-8')
-            lines.append(record)
-            # ---------------------------------------------------------------------------------- #
-
-        lines = []
-        max_uin = 0
-        for book in self.list_book:
-            push_book_record_to_list(book)
-            if book.uin > max_uin:
-                max_uin = book.uin
-        if max_uin < self.max_book_uin:   # - Якщо книги були видалені з кінця переліку додаємо порожній запис max_uin-
-            push_book_record_to_list()
-        try:
-            with open(self._booklist_file_name, 'wb') as file:
-                file.writelines(lines)
-                print('Збереження бази даних книг у файл успішне')
-                self._booklist_saved = True
-                return True
-        except Exception as ex:
-            print(f'Не вдалося відкрити файл {self._booklist_file_name} для запису. ' +
-                  f'Якщо він відкритий іншою програмою - закрийте її та повторіть. {self.pt_ln}{ex}')
 
     # ---------------------------------------------------------------------------------------------------------------- #
-    def save_list_reader_to_file(self):
+    def save_list_reader(self):
         """
         Метод зберігає весь перелік читачів в текстовий файл reader_list.txt в модулі проекту.
         В разі успішного збереження - встановлює ознаку збереженості переліку читачів
 
         :return: Нічого не вертає
         """
-
-        # ---------------------------------------------------------------------------------- #
-        def push_reader_record_to_list(x_reader: Reader = None):
-            """
-            Допоміжна фінкція скорочує запис коду функції push_reader_record_to_list, в якій і знаходиться.
-            Формує та накопичує рядки даних читачів
-
-            :param x_reader: об'єкт читача, інформація з якого переноситься в перелік, для порожнього запису - None
-            :return: Нічого не вертає. цільовий перелік в нелокальній змінній
-            """
-
-            if x_reader:
-                record = f'{reader.uin}{self.pt_tab}{reader.name}{self.pt_tab}{reader.birthday}{self.pt_ln}'
-            else:
-                record = f'{self.max_reader_uin}{self.pt_tab}{self._void_value}{self.pt_tab}{self._void_value}{self.pt_ln}'
-            record = record.encode('UTF-8')
-            lines.append(record)
-            # ---------------------------------------------------------------------------------- #
-
-        lines = []
-        max_uin = 0
-        for reader in self.list_reader:
-            push_reader_record_to_list(reader)
-            if reader.uin > max_uin:
-                max_uin = reader.uin
-        if max_uin < self.max_reader_uin:  # -- Якщо читачі були видалені з кінця переліку додаємо порожній запис --
-            push_reader_record_to_list()
-        try:
-            with open(self._readerlist_file_name, 'wb') as file:
-                file.writelines(lines)
-                print('Збереження бази даних читачів у файл успішне')
-                self._roplelist_saved = True
-                return True
-        except Exception as ex:
-            print(f'Не вдалося відкрити файл {self._readerlist_file_name} для запису. '
-                  f'Якщо він відкритий іншою програмою - закрийте її та повторіть. {self.pt_ln}{ex}')
+        connector = FileTabsStorage(self.pt_tab,self.pt_ln, self._void_value)
+        x_list = connector.fetch_dict_list(self.list_reader, self.max_reader_uin, Reader)
+        if connector.dump(self._readerlist_file_name, x_list, Reader):
+            self._readerlist_saved = True
 
     # ---------------------------------------------------------------------------------------------------------------- #
-    def load_list_book_from_file(self):
+    def load_list_book(self):
         """
         Метод намагається зчитати весь перелік книг з текстового файлу book_list.txt в модулі проекту
         Перевіряє коректність даних. Не коректні записи ігноруються. Встановлює max_uin книг та ознаку збереженості
@@ -537,124 +366,27 @@ class Library:
 
         :return: Список об'єктів книг, зчитаних з файла
         """
-        try:
-            with open(self._booklist_file_name, 'rb') as file:
-                lines = file.read().decode('UTF-8')
-        except FileNotFoundError:
-            print(f'Файл {self._booklist_file_name} не знайдений в пакеті')
-            lines = ''
-        # ----- Розбір зчитаних даних ----- #
-        max_uin = 0
-        book_list = []
-        if lines:
-            recs_count = 0
-            # rec_list = lines.split(self.pt_ln)
-            rec_list = lines.splitlines()
-            succ_count = 0
-            for rec in rec_list:
-                if rec == '':
-                    continue
-                recs_count += 1
-                fields = rec.split(self.pt_tab)
-                if len(fields) == 5:
-                    book_uin = Library.check_uin(fields[0])
-                    title = Library.check_value(fields[1])
-                    author = Library.check_value(fields[2])
-                    publish_year = Library.check_pulish_year(fields[3])
-                    reader_uin = Library.check_uin(fields[4], False)
-                    void_rec = False
-                    if False in (book_uin, title, author, publish_year, reader_uin):
-                        void_rec = self._is_void_record(book_uin, fields)
-                        if void_rec:
-                            max_uin = book_uin
-                        else:
-                            err_count = 0
-                            err_str = f'Запис {recs_count} містить пошкоджене'
-                            if book_uin == False:
-                                err_str, err_count = Library._push_load_error_info(err_str, f' поле [uin] [{fields[0]}]', err_count)
-                            if title == False:
-                                err_str, err_count = Library._push_load_error_info(err_str, f' поле [title] [{fields[1]}]', err_count)
-                            if author == False:
-                                err_str, err_count = Library._push_load_error_info(err_str, f' поле [author] [{fields[2]}]', err_count)
-                            if publish_year == False:
-                                err_str, err_count = Library._push_load_error_info(err_str, f' поле [publish_year] [{fields[3]}]', err_count)
-                            if reader_uin == False:
-                                err_str, err_count = Library._push_load_error_info(err_str, f' поле [reader_uin] [{fields[4]}]', err_count)
-                            print(err_str)
-                            continue
-                    if book_uin > max_uin:
-                        max_uin = book_uin
-                    if not void_rec:
-                        book_list.append(Book(book_uin, title, author, publish_year, reader_uin))
-                        succ_count += 1
-                else:
-                    print(f'Пошкоджений запис [{recs_count}][{rec}] ігнорується')
-            s_err = 'Дані всіх книг успішно зчитані з файлу' if succ_count == recs_count else f'Зчитано {succ_count} записів з {recs_count}'
-            print(s_err)
-            self.max_book_uin = max_uin
-            if book_list:
-                self._booklist_saved = True
+
+        connector = FileTabsStorage(self.pt_tab, self.pt_ln, self._void_value)
+        x_dict, info_list, self.max_book_uin = connector.load(self._booklist_file_name, Book)
+        book_list = connector.fetch_objects_list(x_dict, info_list, Book)
+        self._booklist_saved = len(book_list) != 0
         return book_list
 
     # ---------------------------------------------------------------------------------------------------------------- #
-    def load_list_reader_from_file(self):
+    def load_list_reader(self):
         """
         Метод намагається зчитати весь перелік читачів з текстового файлу reader_list.txt в модулі проекту
         Перевіряє коректність даних. Не коректні записи ігноруються. Встановлює max_uin читачів та ознаку збереженості
         переліку читачів
-        :return:
+
+        :return: Список об'єктів книг, зчитаних з файла
         """
-        try:
-            with open(self._readerlist_file_name, 'rb') as file:
-                lines = file.read().decode('UTF-8')
-        except FileNotFoundError:
-            print(f'Файл {self._readerlist_file_name} не знайдений в пакеті')
-            lines = ''
-        # ----- Розбір зчитаних даних ----- #
-        max_uin = 0
-        reader_list = []
-        if lines:
-            recs_count = 0
-            # rec_list = lines.split(self.pt_ln)
-            rec_list = lines.splitlines()
-            succ_count = 0
-            for rec in rec_list:
-                if rec == '':
-                    continue
-                recs_count += 1
-                fields = rec.split(self.pt_tab)
-                if len(fields) == 3:
-                    reader_uin = Library.check_uin(fields[0])
-                    name = Library.check_value(fields[1])
-                    birthday = Library.check_date_str(fields[2])
-                    void_rec = False
-                    if False in (reader_uin, name, birthday):
-                        void_rec = self._is_void_record(reader_uin, fields)
-                        if void_rec:
-                            max_uin = reader_uin
-                        else:
-                            err_count = 0
-                            err_str = f'Запис {recs_count} містить пошкоджене'
-                            if reader_uin == False:
-                                err_str, err_count = Library._push_load_error_info(err_str, f' поле [uin] [{fields[0]}]', err_count)
-                            if name == False:
-                                err_str, err_count = Library._push_load_error_info(err_str, f' поле [name] [{fields[1]}]', err_count)
-                            if birthday == False:
-                                err_str, err_count = Library._push_load_error_info(err_str, f' поле [birthday] [{fields[2]}]', err_count)
-                            print(err_str)
-                            continue
-                    if reader_uin > max_uin:
-                        max_uin = reader_uin
-                    if not void_rec:
-                        reader_list.append(Reader(reader_uin, name, birthday))
-                        succ_count += 1
-                else:
-                    print(f'Запис [{recs_count}][{rec}] пошкоджений і буде проігнорований')
-            s_err = 'Дані всіх читачів успішно зчитані з файлу' if succ_count != recs_count else f'Зчитано {succ_count} записів з {recs_count}'
-            print(s_err)
-            self.max_reader_uin = max_uin
-            if reader_list:
-                self._readerlist_saved = True
+        connector = FileTabsStorage(self.pt_tab, self.pt_ln, self._void_value)
+        # x_dict, info_list, self.max_reader_uin = connector.load_readers(self._readerlist_file_name)
+        x_dict, info_list, self.max_reader_uin = connector.load(self._readerlist_file_name, Reader)
+        reader_list = connector.fetch_objects_list(x_dict, info_list, Reader)
+        self._readerlist_saved = len(reader_list) != 0
         return reader_list
 
     # ---------------------------------------------------------------------------------------------------------------- #
@@ -959,12 +691,12 @@ class Library:
         print(self.get_table_head('завершення роботи бібліотеки', self.head_len, True))
         if not self._booklist_saved:
             value = input('База даних книг не збережена. Для її збереження ведіть що небудь: ')
-            if Library.check_value(value):
-                self.save_list_book_to_file()
+            if tls.check_value(value):
+                self.save_list_book()
         if not self._readerlist_saved:
             value = input('База даних читачів не збережена. Для її збереження ведіть що небудь: ')
-            if Library.check_value(value):
-                self.save_list_reader_to_file()
+            if tls.check_value(value):
+                self.save_list_reader()
         self.show_resume_action('Бібліотека зачинена')
 
     # ---------------------------------------------------------------------------------------------------------------- #

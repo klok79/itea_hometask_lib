@@ -5,13 +5,7 @@
 # 3. Класс People
 
 from library import Library
-
 a = Library()
 a.main_loop()
-# a.swow_books(0)
-# a.add_book()
-# a.add_book()
-# a.add_book()
-# a.save_list_book()
 
 

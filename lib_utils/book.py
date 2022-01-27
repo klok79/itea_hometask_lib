@@ -26,10 +26,11 @@ class Book:
         self.uin = uin
         self.reader_uin = reader_uin
 
-
     def __str__(self):
         status = 'знаходиться ' + 'в бібліотеці' if self.reader_uin < 0 else f'на руках у читача {self.reader_uin}'
-        return f'id:{self.uin}, автор: {self.author}, назва: {self.title}, рік публікації: {self.publishing_year}, {status}'
+        return f'id:{self.uin}, автор: {self.author}, назва: {self.title}, ' \
+                   f'рік публікації: {self.publishing_year}, {status}'
+
 
 
 
