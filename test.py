@@ -22,11 +22,68 @@ book_list = []
 # for x in dict_list:
 #     print(x)
 
+# def func1(lst1: list, lst2: list, *args):
+#     print(lst1)
+#     print(lst2)
+#     print(args)
+#
+#
+#
+# func1([1,2],['popa', 'dopa', 'ah'])
 
-x = {
-    '1': 58,
-    '2': 55
-}
+from abc import ABC, abstractmethod
+from lib_utils.storage_ex import StorageEx
+#
+# # ----------------------------------------------------------------------------------------------------------------------
+@abstractmethod
+class AbsParent(ABC):
+    """
+    Опис класа батька
+    """
+    @abstractmethod
+    def func1(self, a, b):
+        pass
 
-for i, j in x.items():
-    print(i, j)
+    @abstractmethod
+    def func2(self, c, d, e):
+        pass
+#
+# # ----------------------------------------------------------------------------------------------------------------------
+
+class Dother(AbsParent, StorageEx):
+    """
+    Опис класа доці
+    """
+    def __init__(self, lst1, lst2, *args):
+        """
+        Ініт класа доці
+
+        :param arg1: аргумент 1 класа доці
+        :param arg2: аргумент 2 класа доці
+        :param args: аргумент 3 класа доці
+        """
+        StorageEx.__init__(self, lst1, lst2)
+        # super(StorageEx, self).__init__()
+        self.args = args
+
+    def job(self, name):
+        # print(self.__class__.__name__)
+        a = StorageEx.get_source(self, name)
+        print(a)
+
+    def func1(self, a, b):
+        print('func1')
+
+    def func2(self, a, b, c):
+        print('func2')
+
+
+
+s = Dother(['nm1', 'nm2'], ['sr3', 'sr4'], 'sr5', 'ar6')
+s.job('nm2')
+print(s.class_names)
+print(s.sources)
+
+
+
+

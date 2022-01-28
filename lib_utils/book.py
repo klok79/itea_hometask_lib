@@ -29,12 +29,29 @@ class Book:
     def __str__(self):
         status = 'знаходиться ' + 'в бібліотеці' if self.reader_uin < 0 else f'на руках у читача {self.reader_uin}'
         return f'id:{self.uin}, автор: {self.author}, назва: {self.title}, ' \
-                   f'рік публікації: {self.publishing_year}, {status}'
+               f'рік публікації: {self.publishing_year}, {status}'
 
+    def get_uin(self):
+        return self.uin
 
+    def get_title(self):
+        return self.title
 
+    def get_author(self):
+        return self.author
 
+    def get_year(self):
+        return self.publishing_year
 
+    def get_reader_uin(self):
+        return self.reader_uin
+
+    def get_attr_dict(self) -> dict:
+        return {"uin": self.uin, "title": self.title, "author": self.author, "year": self.publishing_year, "reader_uin": self.reader_uin}
+
+    @staticmethod
+    def build_attr_dict(uin: int, title: str, author: str, publishing_year: int, reader_uin: int) -> dict:
+        return {"uin": uin, "title": title, "author": author, "year": publishing_year, "reader_uin": reader_uin}
 
 
 

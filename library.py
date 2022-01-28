@@ -24,16 +24,19 @@ from datetime import datetime
 class Library:
     # --------------------------------------------------------- #
     def __init__(self):
-        self._booklist_file_name = 'lib_data/book_list.txt'
-        self._readerlist_file_name = 'lib_data/reader_list.txt'
         self._void_value = '-' * 5
         self.max_book_uin = 0
         self.max_reader_uin = 0
         self.head_len = 65
         self.pt_tab = '\t'
         self.pt_ln = '\n'
-        self.list_book = self.load_list_book()
-        self.list_reader = self.load_list_reader()
+        list_classnames = [Book.__name__, Reader.__name__]
+        list_sources = ['lib_data/book_list.txt', 'lib_data/reader_list.txt']
+        self.storage = FileTabsStorage(list_classnames, list_sources,self.pt_tab, self.pt_ln, self._void_value)
+        self.list_book = []
+        self.load_list_book()
+        self.list_reader = []
+        self.load_list_reader()
         self._booklist_saved = True
         self._readerlist_saved = True
 
@@ -333,61 +336,47 @@ class Library:
     # ---------------------------------------------------------------------------------------------------------------- #
     def save_list_book(self):
         """
-         Метод зберігає весь перелік книг в текстовий файл book_list.txt в директорії проекту
+         Метод зберігає весь перелік книг.
          В разі успішного збереження - встановлює ознаку збереженості переліку книг
 
         :return: Нічого не вертає
         """
-        connector = FileTabsStorage(self.pt_tab,self.pt_ln, self._void_value)
-        x_list = connector.fetch_dict_list(self.list_book, self.max_book_uin, Book)
-        if connector.dump(self._booklist_file_name, x_list, Book):
+        if self.storage.dump(self.list_book, Book.__name__):
             self._booklist_saved = True
 
 
     # ---------------------------------------------------------------------------------------------------------------- #
     def save_list_reader(self):
         """
-        Метод зберігає весь перелік читачів в текстовий файл reader_list.txt в модулі проекту.
+        Метод зберігає весь перелік читачів.
         В разі успішного збереження - встановлює ознаку збереженості переліку читачів
 
         :return: Нічого не вертає
         """
-        connector = FileTabsStorage(self.pt_tab,self.pt_ln, self._void_value)
-        x_list = connector.fetch_dict_list(self.list_reader, self.max_reader_uin, Reader)
-        if connector.dump(self._readerlist_file_name, x_list, Reader):
+        if self.storage.dump(self.list_reader, Reader.__name__):
             self._readerlist_saved = True
 
     # ---------------------------------------------------------------------------------------------------------------- #
     def load_list_book(self):
         """
-        Метод намагається зчитати весь перелік книг з текстового файлу book_list.txt в модулі проекту
-        Перевіряє коректність даних. Не коректні записи ігноруються. Встановлює max_uin книг та ознаку збереженості
+        Метод намагається зчитати весь перелік книг.
+        Встановлює перелік книг, max_uin книг та ознаку збереженості переліку книг
         переліку книг
 
-        :return: Список об'єктів книг, зчитаних з файла
+        :return: Нічого
         """
-
-        connector = FileTabsStorage(self.pt_tab, self.pt_ln, self._void_value)
-        x_dict, info_list, self.max_book_uin = connector.load(self._booklist_file_name, Book)
-        book_list = connector.fetch_objects_list(x_dict, info_list, Book)
-        self._booklist_saved = len(book_list) != 0
-        return book_list
+        self.list_book, self.max_book_uin = self.storage.load(Book.__name__)
+        self._booklist_saved = len(self.list_book) != 0
 
     # ---------------------------------------------------------------------------------------------------------------- #
     def load_list_reader(self):
         """
-        Метод намагається зчитати весь перелік читачів з текстового файлу reader_list.txt в модулі проекту
-        Перевіряє коректність даних. Не коректні записи ігноруються. Встановлює max_uin читачів та ознаку збереженості
-        переліку читачів
+        Метод намагається зчитати весь перелік читачів.
+        Встановлює перелік читачів, max_uin читачів та ознаку збереженості переліку читачів.
 
-        :return: Список об'єктів книг, зчитаних з файла
+        :return: Нічого
         """
-        connector = FileTabsStorage(self.pt_tab, self.pt_ln, self._void_value)
-        # x_dict, info_list, self.max_reader_uin = connector.load_readers(self._readerlist_file_name)
-        x_dict, info_list, self.max_reader_uin = connector.load(self._readerlist_file_name, Reader)
-        reader_list = connector.fetch_objects_list(x_dict, info_list, Reader)
-        self._readerlist_saved = len(reader_list) != 0
-        return reader_list
+        self.list_reader, self._readerlist_saved = self.storage.load(Reader.__name__)
 
     # ---------------------------------------------------------------------------------------------------------------- #
     def give_out_book_to_reader(self):
