@@ -45,3 +45,16 @@ class StorageEx:
             raise AttributeError(f'Класс {class_name} не підтримується')
         self.book_mode = class_name == Book.__name__
         self.reader_mode = class_name == Reader.__name__
+
+    # ------------------------------------------------------------------------------------------------------------------
+    @staticmethod
+    def show_messages(message_list: list, need_wait: bool):
+        if message_list:
+            for message in message_list:
+                print(message)
+            if need_wait:
+                input('Натисніть що небудь для продовження: ')
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # @staticmethod
+    # def false_include(*args):

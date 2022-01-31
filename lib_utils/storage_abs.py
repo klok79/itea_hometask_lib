@@ -19,12 +19,13 @@ class StorageAbs(ABC):
         pass
 
     @abstractmethod
-    def dump(self, list_obj: list, obj_classname: str) -> bool:
+    def dump(self, list_obj: list, obj_classname: str, max_uin: int = None) -> bool:
         """
         Метод має записувати весь перелік книг або читачів в якесь джерело
 
         :param list_obj: перелік (list) цільових об'єктів, що підлягають запису.
         :param obj_classname: Назва класу об'єктів, що записуються
+        :param max_uin: Максимальний унікальний номер об'єкту (Для збереження у файл)
         :return:  Ознаку успішності запису.
         """
         pass

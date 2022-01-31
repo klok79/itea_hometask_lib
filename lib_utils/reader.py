@@ -30,5 +30,9 @@ class Reader:
         return {"uin": self.uin, "name": self.name, "birthday": self.birthday}
 
     @staticmethod
-    def build_attr_dict(uin: str, name: str, birthday: str) -> dict:
+    def build_attr_dict(uin: int, name: str, birthday: str) -> dict:
         return {"uin": uin, "name": name, "birthday": birthday}
+
+    @classmethod
+    def create_object(cls, uin: int, name: str, birthday: str):
+        return cls(uin, name, birthday)

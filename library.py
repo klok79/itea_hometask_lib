@@ -17,6 +17,7 @@ from lib_utils.book import Book
 from lib_utils.reader import Reader
 from lib_utils.tools import LibTools as tls
 from lib_utils.storage_fts import FileTabsStorage
+from lib_utils.storage_jsn import FileJsonStorage
 from os import system
 from datetime import datetime
 
@@ -31,14 +32,16 @@ class Library:
         self.pt_tab = '\t'
         self.pt_ln = '\n'
         list_classnames = [Book.__name__, Reader.__name__]
-        list_sources = ['lib_data/book_list.txt', 'lib_data/reader_list.txt']
-        self.storage = FileTabsStorage(list_classnames, list_sources,self.pt_tab, self.pt_ln, self._void_value)
+        # list_sources = ['lib_data/book_list.txt', 'lib_data/reader_list.txt']
+        list_sources = ['lib_data/book_list.json', 'lib_data/reader_list.json']
+        # self.storage = FileTabsStorage(list_classnames, list_sources,self.pt_tab, self.pt_ln, self._void_value)
+        self.storage = FileJsonStorage(list_classnames, list_sources, self.pt_ln, self._void_value)
+        self._booklist_saved = True
+        self._readerlist_saved = True
         self.list_book = []
         self.load_list_book()
         self.list_reader = []
         self.load_list_reader()
-        self._booklist_saved = True
-        self._readerlist_saved = True
 
     # ---------------------------------------------------------------------------------------------------------------- #
     @staticmethod
@@ -341,7 +344,7 @@ class Library:
 
         :return: Нічого не вертає
         """
-        if self.storage.dump(self.list_book, Book.__name__):
+        if self.storage.dump(self.list_book, Book.__name__, self.max_book_uin):
             self._booklist_saved = True
 
 
@@ -353,7 +356,7 @@ class Library:
 
         :return: Нічого не вертає
         """
-        if self.storage.dump(self.list_reader, Reader.__name__):
+        if self.storage.dump(self.list_reader, Reader.__name__, self.max_reader_uin):
             self._readerlist_saved = True
 
     # ---------------------------------------------------------------------------------------------------------------- #
@@ -366,7 +369,7 @@ class Library:
         :return: Нічого
         """
         self.list_book, self.max_book_uin = self.storage.load(Book.__name__)
-        self._booklist_saved = len(self.list_book) != 0
+        self._booklist_saved = True
 
     # ---------------------------------------------------------------------------------------------------------------- #
     def load_list_reader(self):
@@ -376,9 +379,10 @@ class Library:
 
         :return: Нічого
         """
-        self.list_reader, self._readerlist_saved = self.storage.load(Reader.__name__)
+        self.list_reader, self.max_reader_uin = self.storage.load(Reader.__name__)
+        self._readerlist_saved = True
 
-    # ---------------------------------------------------------------------------------------------------------------- #
+        # ---------------------------------------------------------------------------------------------------------------- #
     def give_out_book_to_reader(self):
         """
         Видати наявну в бібліотеці книгу зареєстрованому читачу

@@ -31,58 +31,107 @@ book_list = []
 #
 # func1([1,2],['popa', 'dopa', 'ah'])
 
-from abc import ABC, abstractmethod
-from lib_utils.storage_ex import StorageEx
+# from abc import ABC, abstractmethod
+# from lib_utils.storage_ex import StorageEx
+# #
+# # # ----------------------------------------------------------------------------------------------------------------------
+# @abstractmethod
+# class AbsParent(ABC):
+#     """
+#     Опис класа батька
+#     """
+#     @abstractmethod
+#     def func1(self, a, b):
+#         pass
 #
-# # ----------------------------------------------------------------------------------------------------------------------
-@abstractmethod
-class AbsParent(ABC):
-    """
-    Опис класа батька
-    """
-    @abstractmethod
-    def func1(self, a, b):
-        pass
-
-    @abstractmethod
-    def func2(self, c, d, e):
-        pass
+#     @abstractmethod
+#     def func2(self, c, d, e):
+#         pass
+# #
+# # # ----------------------------------------------------------------------------------------------------------------------
 #
-# # ----------------------------------------------------------------------------------------------------------------------
+# class Dother(AbsParent, StorageEx):
+#     """
+#     Опис класа доці
+#     """
+#     def __init__(self, lst1, lst2, *args):
+#         """
+#         Ініт класа доці
+#
+#         :param arg1: аргумент 1 класа доці
+#         :param arg2: аргумент 2 класа доці
+#         :param args: аргумент 3 класа доці
+#         """
+#         StorageEx.__init__(self, lst1, lst2)
+#         # super(StorageEx, self).__init__()
+#         self.args = args
+#
+#     def job(self, name):
+#         # print(self.__class__.__name__)
+#         a = StorageEx.get_source(self, name)
+#         print(a)
+#
+#     def func1(self, a, b):
+#         print('func1')
+#
+#     def func2(self, a, b, c):
+#         print('func2')
+#
+#
+#
+# s = Dother(['nm1', 'nm2'], ['sr3', 'sr4'], 'sr5', 'ar6')
+# s.job('nm2')
+# print(s.class_names)
+# print(s.sources)
 
-class Dother(AbsParent, StorageEx):
-    """
-    Опис класа доці
-    """
-    def __init__(self, lst1, lst2, *args):
-        """
-        Ініт класа доці
 
-        :param arg1: аргумент 1 класа доці
-        :param arg2: аргумент 2 класа доці
-        :param args: аргумент 3 класа доці
-        """
-        StorageEx.__init__(self, lst1, lst2)
-        # super(StorageEx, self).__init__()
-        self.args = args
+# import json
+# lst = [17, 'polop', True, 0, -3, 'weryt']
+# dct = {'1':17, '2':'polop', '3': True, '4': 0, '5': -3, '6':'weryt'}
+# # with open('test_json1.json', 'w') as f:
+# #     json.dump(dct, f)
+#
+#
+# print(dct.keys())
 
-    def job(self, name):
-        # print(self.__class__.__name__)
-        a = StorageEx.get_source(self, name)
-        print(a)
+def false_include(*args):
+    for x in args:
+        if x == False:
+            return 'Present'
+    else:
+        return 'Absent'
 
-    def func1(self, a, b):
-        print('func1')
 
-    def func2(self, a, b, c):
-        print('func2')
+    # print(args)
+    # if False in args:
+    #     print('Present')
+    # else:
+    #     print('Absent')
+    #
 
 
 
-s = Dother(['nm1', 'nm2'], ['sr3', 'sr4'], 'sr5', 'ar6')
-s.job('nm2')
-print(s.class_names)
-print(s.sources)
+
+# if None in s:
+#     print('Present')
+# else:
+#     print('Absent')
+
+print(false_include(1, 0, [55,232], '88'))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

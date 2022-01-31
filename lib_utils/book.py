@@ -53,6 +53,11 @@ class Book:
     def build_attr_dict(uin: int, title: str, author: str, publishing_year: int, reader_uin: int) -> dict:
         return {"uin": uin, "title": title, "author": author, "year": publishing_year, "reader_uin": reader_uin}
 
+    @classmethod
+    def create_object(cls, uin: int, title: str, author: str, publishing_year: int, reader_uin: int):
+        return cls(uin, title, author, publishing_year, reader_uin)
+
+
 
 
 
