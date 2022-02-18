@@ -1,7 +1,3 @@
-# 3. Класс People
-# - ???
-# Методы:
-# ???
 class Reader:
     def __init__(self, uin, name, birthday):
         """

@@ -1,59 +1,50 @@
-# 1. Класс библиотека
-# Поля:
-# - +список книг (list Book)
-# - +список читателей (list Reader)
-# Методы:
-# - + Добавить книгу
-# - + Удалить книгу
-# - Отдать книгу читателю
-# - Принять книгу от читателя
-# - +Вывести список всех книг
-# - +Вывести список книг в библиотеке (в наличии)
-# - +Вывести списк книг, которые не в наличии
-# - Отсортировать список книг по названию, автору, году издания (lambda будет плюсом)
-
-
 from lib_utils.book import Book
 from lib_utils.reader import Reader
 from lib_utils.tools import LibTools as tls
-from lib_utils.storage_fts import FileTabsStorage
+from threading import RLock
+# from lib_utils.storage_fts import FileTabsStorage
 from lib_utils.storage_jsn import FileJsonStorage
-from os import system
 from datetime import datetime
-import socket, json
+import socket
+import json
 from ITEA_socket_utils import msg_utils as su
+
+from lib_utils.client_conn import Client_conn
+from concurrent.futures import ThreadPoolExecutor
 
 
 class Library:
     # --------------------------------------------------------- #
-    def __init__(self, ip: str, port: int, clients_count: int):
+    def __init__(self, ip: str, port: int, max_clients_count: int):
         self.ok = '!@#--ok--#@!'
         self.fail = '!@#--fail--#@!'
         self._void_value = '-' * 5
         self.max_book_uin = 0
         self.max_reader_uin = 0
+        self.__max_clients_count = max_clients_count
+        self.__clients_list= []
+        self.lock = RLock()
         self.head_len = 65
         self.pt_tab = '\t'
         self.pt_ln = '\n'
         list_classnames = [Book.__name__, Reader.__name__]
-                # list_sources = ['lib_data/book_list.txt', 'lib_data/reader_list.txt']
+        # list_sources = ['lib_data/book_list.txt', 'lib_data/reader_list.txt']
         list_sources = ['lib_data/book_list.json', 'lib_data/reader_list.json']
-                # self.storage = FileTabsStorage(list_classnames, list_sources,self.pt_tab, self.pt_ln, self._void_value)
+        # self.storage = FileTabsStorage(list_classnames, list_sources,self.pt_tab, self.pt_ln, self._void_value)
         self.storage = FileJsonStorage(list_classnames, list_sources, self.pt_ln, self._void_value)
         self.sock = socket.socket()
         self.sock.bind((ip, port))
-        self.sock.listen(clients_count)
+        self.sock.listen(max_clients_count)
         self._booklist_saved = True
         self._readerlist_saved = True
         self.list_book = []
         self.load_list_book()
         self.list_reader = []
         self.load_list_reader()
-        self.conn, self.client_addr = self.sock.accept()
 
     # ---------------------------------------------------------------------------------------------------------------- #
     @staticmethod
-    def get_table_head(head: str, size: int, upper: bool = False) -> str:
+    def str_head(head: str, size: int, upper: bool = False) -> str:
         """
         Метод формує красиву шапочку для таблиці / меню
 
@@ -63,14 +54,16 @@ class Library:
         :param upper: Ознака переведення заголовку у верхній регістр
         :return: Вертає рядок із заголовком по центру оздоблений з двох боків символами =
         """
-        if upper: head = head.upper()
+        if upper:
+            head = head.upper()
         head = f' {head} '
         len_head = len(head)
-        if size < (len_head + 4):  size = len_head + 4
+        if size < (len_head + 4):
+            size = len_head + 4
         return f'{head:{"="}^{size}}'
 
     # ---------------------------------------------------------------------------------------------------------------- #
-    def show_resume_action(self, prompt: str, bottom_len: int = None) -> str:
+    def str_resume(self, prompt: str, bottom_len: int = None) -> str:
         """
         Метод виводить результат відпрацювання пункта меню. Скорочує запис кода
 
@@ -80,36 +73,44 @@ class Library:
         """
         if bottom_len is None:
             bottom_len = self.head_len
-        return (f'{self.pt_ln}{prompt}{self.pt_ln}{"-" * bottom_len}')
+        return f'{self.pt_ln}{prompt}{self.pt_ln}{"-" * bottom_len}'
 
     # ---------------------------------------------------------------------------------------------------------------- #
-    def get_bookpos_by_uin(self, book_uin: int):
+    def get_book_by_uin(self, book_uin: int) -> Book:
         """
-        Метод вертає позицію книги з заданим uin в переліку книг
+        Метод вертає об'єкт книги з заданим uin з переліку книг
 
         :param book_uin: Унікальний номер книги, що розшукається
-        :return: Порядковий номер (індекс) книги з вказаним номером в переліку книг або None, якщо такої книги немає
+        :return: Об'єкт книги з заданим uin або None, якщо такої книги немає
         """
-        pos = 0
-        for book in self.list_book:
-            if book.uin == book_uin:
-                return pos
-            pos += 1
+        try:
+            pos = 0
+            self.lock.acquire()
+            for book in self.list_book:
+                if book.uin == book_uin:
+                    return book
+                pos += 1
+        finally:
+            self.lock.release()
 
     # ---------------------------------------------------------------------------------------------------------------- #
-    def get_readerpos_by_uin(self, reader_uin: int):
+    def get_reader_by_uin(self, reader_uin: int) -> Reader:
         """
-        Метод вертає позицію читача з заданим uin в переліку читачів
+        Метод вертає об'єкт читача з заданим uin в переліку читачів
 
-        :param reader_uin: Унікальний номер книги, що розшукається
-        :return: Порядковий номер (індекс) читача з вказаним номером в переліку читачів або None,
-        якщо такого читача немає
+        :param reader_uin: Унікальний номер читача, що розшукається
+        :return: Об'єкт читача з вказаним номером або None, якщо такого читача немає
         """
-        pos = 0
-        for reader in self.list_reader:
-            if reader.uin == reader_uin:
-                return pos
-            pos += 1
+
+        try:
+            pos = 0
+            self.lock.acquire()
+            for reader in self.list_reader:
+                if reader.uin == reader_uin:
+                    return reader
+                pos += 1
+        finally:
+            self.lock.release()
 
     # ---------------------------------------------------------------------------------------------------------------- #
     @staticmethod
@@ -121,10 +122,11 @@ class Library:
         return kwargs
 
     # ---------------------------------------------------------------------------------------------------------------- #
-    def select_menu(self, title: str = None, menu_width: int = None, cls: bool = True, menu: dict = None,
-                    question: str = 'Оберіть пункт меню'):
+    def select_menu(self, conn: socket.socket, title: str = None, menu_width: int = None, cls: bool = True,
+                    menu: dict = None, question: str = 'Оберіть пункт меню'):
         """
         Метод готує консоль, виводить в неї словник, очікує вводу (input) ключа словника
+        :param conn: Активне з'єднання з клієнтом
         :param title: Заголовок меню
         :param menu_width: Ширина меню
         :param cls: Ознака необхідності попередньої очистки консолі
@@ -132,8 +134,10 @@ class Library:
         :param question: Текст, що буде виведений під таблицею меню
         :return: Введений текстовий ключ або None
         """
-        if menu_width is None: menu_width = self.head_len
-        if title is not None: title = self.get_table_head(f'{title}', menu_width, False)
+        if menu_width is None:
+            menu_width = self.head_len
+        if title is not None:
+            title = self.str_head(f'{title}', menu_width, False)
         x_list = []
         count = 0
         for key in menu:
@@ -141,12 +145,14 @@ class Library:
                 count = len(key)
         for key, value in menu.items():
             x_list.append(f'{key:>{count}}. {value}')
-        if menu_width > 0: x_list.append('-' * menu_width)
-        value = self.client_print(title=title, cls=cls, input=True, question=question, x_list=x_list)
+        if menu_width > 0:
+            x_list.append('-' * menu_width)
+        value = self.client_print(conn=conn, title=title, cls=cls, input=True, question=question, x_list=x_list)
+        if value == self.fail:
+            return value
         value = str(value).strip()
         if value in menu:
             return value
-
 
     # ---------------------------------------------------------------------------------------------------------------- #
     def json_dumps(self, obj: dict):
@@ -156,39 +162,60 @@ class Library:
             print(f'Помилка json {ex}{self.pt_ln}{obj}')
 
     # ---------------------------------------------------------------------------------------------------------------- #
-    def client_print(self, title: str = '', cls: bool = False, input:bool = False, question: str = '',
-                     x_list: list = None,  exit: bool = False, ret_strip:bool = False):
+    def change_list_clients(self, conn: socket.socket, add: bool = False):
+        self.lock.acquire()
+        if add:
+            self.__clients_list.append(id(conn))
+        else:
+            self.__clients_list.remove(id(conn))
+        self.lock.release()
+        print(f'Всього приєднано: {len(self.__clients_list)} клієнтів')
+
+    # ---------------------------------------------------------------------------------------------------------------- #
+    def client_print(self, conn: socket.socket = None, title: str = '', cls: bool = False, input: bool = False,
+                     question: str = '', x_list: list = None,  exit: bool = False):
         """
         Метод реалізує в консолі: 1. Опціональну очиску консолі. 2. Опціональний вивід рядку
         тексту, Опціональне очікування вводу від користувача
+
+        :param conn: Відкрите з'єднання з клієнтом
         :param title: Текст, який необхідно вивести в консоль
         :param cls: Ознака попередньої очистки консолі
         :param input: Ознака того, що після виводу тексту необхідно очікувати ввід даних від користувача
+        :param x_list: Перелік текстових рядків, які необхідно вивести в консоль
         :param question: Текст конкретизації даних, що очікуються від користувача,
+        :param exit: Вказівка клієнту завершити роботу
         """
-        if x_list is None: x_list = []
-        data = Library.args_to_dict(title = title, cls = cls, input = input, question = question,
-                                    l_list = x_list, exit = exit)
+        if x_list is None:
+            x_list = []
+        data = Library.args_to_dict(title=title, cls=cls, input=input, question=question, l_list=x_list, exit=exit)
         data = self.json_dumps(data)
         data = data.encode(su.default_encoding)
-        if su.send_msg(data, self.conn):
-            data = su.recv_msg(self.conn)
-            data = data.decode(su.default_encoding)
-            data = json.loads(data)
-            if data == self.fail:
-                succ = False
-            else:
-                succ = True if question else data == self.ok
-            if succ:
-                data = str(data).strip()
-                return data if question else True
-            else:
-                print('wait_client - прийшло не то. Хрен знає, що робити')
-                return '' if question else False
+        if not su.send_msg(data, conn):
+            return self.fail
+        data = su.recv_msg(conn)
+        if not data:
+            return self.fail
+        # ----------------------------
+        data = data.decode(su.default_encoding)
+        data = json.loads(data)
+        if data == self.fail:
+            succ = False
+        else:
+            succ = True if question else data == self.ok
+        if succ:
+            data = str(data).strip()
+            return data if question else True
+        else:
+            print('wait_client - прийшло не то. Хрен знає, що робити')
+            return '' if question else False
+
+    # ---------------------------------------------------------------------------------------------------------------- #
+
     # ---------------------------------------------------------------------------------------------------------------- #
     def main_loop(self):
         """
-        Метод диспетчер головного циклу. Виводить меню, очікує вводу та перенеаправляє потік
+        Метод осікує віддаленого з'єднання з клієнтами (кількість обмежена в init)
         :return: Нічого не вертає
         """
         main_menu = {
@@ -205,10 +232,10 @@ class Library:
             '11': 'Зберегри / Завантажити',
             '12': 'Вивести пререлік книг без виєбонів',
             '13': 'Вивести пререлік читачів без виєбонів',
-            '0': 'Завершити роботу'
+            '0': 'Завершити роботу клієнта'
         }
         menu_function = [
-            self.before_exit,               # +0 Завершити роботу
+            self.before_client_exit,        # +0 Завершити роботу клієнта
             self.add_book,                  # +1 Додати книгу в бібліотеку
             self.delete_book,               # +2 Видалити книгу з бібліотеки (Можна тільки наявні в бібліотеці книги)
             self.add_reader,                # +3 Зареєструвати читача
@@ -223,140 +250,208 @@ class Library:
             self.easy_show_listbook,        # +12 Вивести пререлік книг без виєбонів
             self.easy_show_readerbook       # +13 Вивести пререлік читачів без виєбонів
         ]
-        while True:
-            value = self.select_menu(title='ГОЛОВНЕ МЕНЮ БІБЛІОТЕКИ', menu=main_menu,
-                                     question='Введіть номер дії, яку необхідно зробити: ')
-            if value is not None:
-                menu_function[int(value)]()
-                if value == '0':
-                    self.conn.close()
-                    self.sock.close()
-                    break
-                else:
-                    self.client_print(title='Натисніть Enter для продовження', input=True)
+
+        with ThreadPoolExecutor(max_workers=self.__max_clients_count) as tpex:
+            while True:
+                """
+                Тепер в цьому циклі замість виводу головного меню та очікування вводу від користувача є цикл з 
+                очікуванням віддаленого з'єднання з клієнтом, створення та запуск окремого потоку для спілкування з цим 
+                клієнтом. 
+                Цикл виводу головного меню та очікування вводу від користувача тепер виконується в класі Client_conn
+                в окремому для кожного клієнта потоці.
+                Кожному клієнту я передаю в якості параметру бібліотеку, щоб він міг користуватися її методами.
+                Поки не знаю, що з того вийде. 
+                """
+                conn, _ = self.sock.accept()
+                tpex.submit(Client_conn(conn, main_menu, menu_function, self))
+                self.change_list_clients(conn, True)
 
     # ---------------------------------------------------------------------------------------------------------------- #
-    def easy_show_listbook(self):
+    def easy_show_listbook(self, conn: socket.socket = None):
         for book in self.list_book:
             print(book)
         print(f'max_uin = {self.max_book_uin}')
 
     # ---------------------------------------------------------------------------------------------------------------- #
-    def easy_show_readerbook(self):
+    def easy_show_readerbook(self, conn: socket.socket = None):
         for reader in self.list_reader:
             print(reader)
         print(f'max_uin = {self.max_reader_uin}')
 
     # ---------------------------------------------------------------------------------------------------------------- #
-    def add_book(self):
+    # def inc_max_uin(self, for_book: bool):
+    #     """
+    #     Метод збільшує max uin книг або читачів з блокуванням потоків
+    #     :return: Нічого не вертає
+    #     """
+    #     self.lock.acquire()
+    #     if for_book:
+    #         self.max_book_uin += 1
+    #     else:
+    #         self.max_reader_uin +=1
+    #     self.lock.release()
+
+    # ---------------------------------------------------------------------------------------------------------------- #
+    def add_book(self, conn: socket.socket):
         """
         Метод очікує вводу послідовно назви, автора та року публікації книги перевіряє введені значення,
         створює та додає екземпляр книги в перелік книг.
         Скидає ознаку збереженості переліку книг
         :return: Нічого не вертає
         """
-        value = self.client_print(title=self.get_table_head('Додавання нової книги в бібліотеку', self.head_len, True),
-                          cls=True, input=True, question='Введіть повністю наву книги: ')
+        value = self.client_print(conn=conn,
+                                  title=self.str_head('Додавання нової книги в бібліотеку', self.head_len, True),
+                                  cls=True, input=True, question='Введіть повністю наву книги: ')
         title = tls.check_value(value)
         if not title:
-            self.client_print(title=self.show_resume_action('Назва книги не введена. Книга не додана.'))
+            self.client_print(conn=conn, title=self.str_resume('Назва книги не введена. Книга не додана.'))
             return
         # ------------------------------------------------
-        value = self.client_print(input=True, question="Введіть автора книги: ")
+        value = self.client_print(conn=conn, input=True, question="Введіть автора книги: ")
         author = tls.check_value(value)
         if not author:
-            self.client_print(title=self.show_resume_action('Автор не введений. Книга не додана.'))
+            self.client_print(conn=conn, title=self.str_resume('Автор не введений. Книга не додана.'))
             return
         # ------------------------------------------------
-        value = self.client_print(input=True, question="Введіть рік публікації книги: ")
+        value = self.client_print(conn=conn, input=True, question="Введіть рік публікації книги: ")
         publ_year = tls.check_pulish_year(value)
         if not publ_year:
             s_err = 'не введений' if value == "" else f'[{value}] введений не корректно'
-            self.client_print(title=self.show_resume_action(f'Рік публікації {s_err}. Книга не додана.'))
+            self.client_print(conn=conn, title=self.str_resume(f'Рік публікації {s_err}. Книга не додана.'))
             return
         # ------------------------------------------------
-        self.max_book_uin += 1
         book = Book(self.max_book_uin, title, author, publ_year,  -1)
+        self.lock.acquire()
         self.list_book.append(book)
-        self.client_print(title=self.show_resume_action(f'Книга "{book}" додана в бібліотеку'))
+        self.max_book_uin += 1
         self._booklist_saved = False
+        self.lock.release()
+        self.client_print(conn=conn, title=self.str_resume(f'Книга "{book}" додана в бібліотеку'))
 
     # ---------------------------------------------------------------------------------------------------------------- #
-    def add_reader(self):
+    def add_reader(self, conn: socket.socket):
         """
         Метод очікує вводу, перевіряє введені значення, створює та додає екземпляр читача в перелік читачів
         Скидає ознаку збереженості переліку читачів
         :return: Нічого не вертає
         """
-        value = self.client_print(title=self.get_table_head('Реєстрація нового читача в бібліотеці', self.head_len, True),
+        value = self.client_print(conn=conn,
+                                  title=self.str_head('Реєстрація нового читача в бібліотеці', self.head_len, True),
                                   cls=True, input=True, question="Введіть повне ім'я читача (ПІБ, титул, тощо): ")
         reader_name = tls.check_value(value)
         if not reader_name:
-            self.client_print(title=self.show_resume_action("Ім'я читача не введене. Реєстрація відхилена."))
+            self.client_print(conn=conn, title=self.str_resume("Ім'я читача не введене. Реєстрація відхилена."))
             return
         # ------------------------------------------------
-        value = self.client_print(input=True, question="Введіть дату народження читача: ")
+        value = self.client_print(conn=conn, input=True, question="Введіть дату народження читача: ")
         birthday = tls.check_date_str(value)
         if not birthday:
             s_err = 'не введена' if value == '' else f'[{value}] введена не коректно'
-            self.client_print(title=self.show_resume_action(f'Дата дня народження {s_err}. Реєстрація відхилена.'))
+            self.client_print(conn=conn, title=self.str_resume(f'Дата дня народження {s_err}. Реєстрація відхилена.'))
             return
         # ------------------------------------------------
-        self.max_reader_uin += 1
         reader = Reader(self.max_reader_uin, reader_name, birthday)
+        self.lock.acquire()
         self.list_reader.append(reader)
-        self.client_print(title= self.show_resume_action(f'Новий користувач  "{reader}" зареєстрований'))
+        self.max_reader_uin += 1
         self._readerlist_saved = False
+        self.lock.release()
+        self.client_print(conn=conn, title=self.str_resume(f'Новий користувач  "{reader}" зареєстрований'))
 
     # ---------------------------------------------------------------------------------------------------------------- #
-    def delete_book(self):
+    def delete_book(self, conn: socket.socket):
         """
         Метод виводить перелік не виданих книг, очікує вводу номера та видаляє вказану книгу
         Видалити можна тільки книги, що знаходяться в бібліотеці
         :return: Нічого не ветає
         """
-        self.client_print(title=self.get_table_head('Видалення книги з бібліотеки', self.head_len, True), cls=True)
-        if len(self.list_book) > 0:
-            showed_books = self.show_book_list(-1, False, True)
-            value = self.client_print(title='Видаленню підлягають тільки ті книги, які знаходяться в бібліотеці '+
-                                            '(не видані читачам на руки)', input=True,
-                                      question='Введіть номер книги, яку необхідно видалити з бібліотеки: ', ret_strip=True)
-            if value in showed_books:
-                book_pos = self.get_bookpos_by_uin(showed_books[value])
-                del_book = str(self.list_book[book_pos])
-                self.list_book.pop(book_pos)
-                self.client_print(title=self.show_resume_action(f'Книга [{del_book}] видалена з бібліотеки'))
-                self._booklist_saved = False
-            else:
-                self.client_print(title=self.show_resume_action('Видалення книги відхилене'))
+
+        fail_str = 'Видалення книги відхилене'
+        self.client_print(conn=conn, title=self.str_head('Видалення книги з бібліотеки', self.head_len, True), cls=True)
+        if len(self.list_book) == 0:
+            self.client_print(conn=conn, title=self.str_resume(f'В бібліотеці взагалі немає книг. {fail_str}'))
+            return
+        # Виводимо перелік книг, що знаходятьсяв бібліотеці та очікуємо ввода номеру
+        showed_books = self.show_book_list(conn=conn, book_status=-1, cls=False, ret_showed=True)
+        if not showed_books:
+            # Повідомлення про відсутність вказаних книг згенерує метод show_book_list сам
+            return
+        value = self.client_print(conn=conn,
+                                  title='Видаленню підлягають тільки ті книги, які знаходяться в бібліотеці.',
+                                  input=True, question='Введіть номер книги, яку необхідно видалити з бібліотеки: ')
+        if value not in showed_books:
+            # Якщо від користувача отримано не число з переліку
+            self.client_print(conn=conn, title=self.str_resume(fail_str))
+            return
+
+        self.lock.acquire()
+        # Отримуємо книгу (на період пошуку - подвійний тормоз потоків)
+        del_book = self.get_book_by_uin(showed_books[value])
+        # Другий тормоз знятий, але книга могла бути видалена чи видана іншому читачу
+        if del_book is None:
+            title = f'Нажаль, книга з ідентифікатором {showed_books[value]} щойно була видалена з бібліотеки іншим ' \
+                    f'користувачем. {fail_str}'
         else:
-            self.client_print(title=self.show_resume_action('В бібліотеці немає книг'))
+            # Книга не видалена з бібліотеки
+            if del_book.reader_uin < 0:
+                # Книга ще в бібліотеці
+                self.list_book.remove(del_book)
+                self._booklist_saved = False
+                title = f'Книга [{del_book}] видалена з бібліотеки'
+            else:
+                title = f'Нажаль, книга {del_book} щойно була видана іншому читачу.{fail_str}'
+        # Знімаємо перший тормоз
+        self.lock.release()
+        self.client_print(conn=conn, title=self.str_resume(title))
 
     # ---------------------------------------------------------------------------------------------------------------- #
-    def delete_reader(self):
+    def delete_reader(self, conn: socket.socket):
         """
         Метод виводить перелік читачів, що не мають книг на руках, очікує вводу номера та видаляє вказаного читача
         :return: Нічого не вертає
         """
-        self.client_print(title=self.get_table_head('Видалення читача з бібліотеки', self.head_len, True), cls=True)
-        if len(self.list_reader) > 0:
-            showed_readers = self.show_reader_list(-1, False, True)
-            value = self.client_print(title='Видаленню підлягають тільки ті читачі, які не мають на руках жодної книги',
-                                input=True, question='Введіть номер читача, якого необхідно видалити з бібліотеки: ', ret_strip=True)
-            if value in showed_readers:
-                reader_pos = self.get_readerpos_by_uin(showed_readers[value])
-                del_reader = str(self.list_reader[reader_pos])
-                self.list_reader.pop(reader_pos)
-                self.client_print(title=self.show_resume_action(f'Читач [{del_reader}] видалений з бібліотеки'))
-                # self.show_resume_action(f'Читач [{del_reader}] видалений з бібліотеки')
-                self._readerlist_saved = False
-            else:
-                self.client_print(title=self.show_resume_action('Видалення читача відхилене'))
+        fail_str = 'Видалення читача відхилене'
+        self.client_print(conn=conn, title=self.str_head('Видалення читача з бібліотеки', self.head_len, True), cls=True)
+        if len(self.list_reader) == 0:
+            self.client_print(conn=conn, title=self.str_resume('У бібліотеки немає зареєстрованих читачів'))
+            return
+
+        # Виводимо перелік читачів, які не мають книг на руках та очікуємо ввода номеру
+        showed_readers = self.show_reader_list(conn=conn, reader_status=-1, cls=False, ret_showed=True)
+        if not showed_readers:
+            # Повідомлення про відсутність вказаних книг згенерує метод show_reader_list сам
+            return
+        value = self.client_print(conn=conn,
+                                  title='Видаленню підлягають тільки ті читачі, які не мають на руках жодної книги',
+                                  input=True, question='Введіть номер читача, якого необхідно видалити з бібліотеки: ')
+        if value not in showed_readers:
+            # Якщо від користувача отримано не число з переліку
+            self.client_print(conn=conn, title=self.str_resume(fail_str))
+            return
+
+        self.lock.acquire()
+        # Отримуємо читача (на період пошуку - подвійний тормоз потоків)
+        del_reader = self.get_reader_by_uin(showed_readers[value])
+        # Другий тормоз знятий, але чтач мміг бути видалений чи взяти книгу
+        if del_reader is None:
+            # Якщо читач був підступно видалений іншим користувачем
+            title = f'Нажаль, читач з ідентифікатором {showed_readers[value]} щойно був видалений з ' \
+                    f'бібліотеки іншим користувачем. {fail_str}'
         else:
-            self.client_print(title=self.show_resume_action('У бібліотеки немає зареєстрованих читачів'))
+            # Читач іще зареєстрований - у методі повториний лок потоків
+            count = self.get_reader_books(del_reader.uin, 'count')
+            if count == 0:
+                # Якщо книг у читача досі немає
+                self.list_reader.remove(del_reader)
+                self._readerlist_saved = False
+                title = f'Читач [{del_reader}] видалений з бібліотеки'
+            else:
+                title = f'Нажаль, читачу {del_reader} щойно була видана книга.{fail_str}'
+        self.lock.release()
+        self.client_print(conn=conn, title=self.str_resume(title))
 
     # ---------------------------------------------------------------------------------------------------------------- #
-    def file_job(self):
+    def file_job(self, conn: socket.socket ):
         """
         Метод реалізує опцію меню роботи з файлами шляхом відображення додаткового меню
         :return: Нічого не вертає
@@ -367,16 +462,16 @@ class Library:
             '3': 'Зберегти перелік читачів у файл',
             '4': 'Завантажити перелік читачів з файлу'
         }
-        value = self.select_menu(title='РОБОТА З ФАЙЛАМИ ДАНИХ', menu=menu, question='Оберіть необхідну дію: ')
+        value = self.select_menu(conn=conn, title='РОБОТА З ФАЙЛАМИ ДАНИХ', menu=menu, question='Оберіть необхідну дію: ')
         if value is not None:
             file_methods = [self.save_list_book,
                             self.load_list_book,
                             self.save_list_reader,
                             self.load_list_reader]
             file_methods[int(value) - 1]()
-            self.client_print(title=self.show_resume_action('Файлова операція закінчена'))
+            self.client_print(conn=conn, title=self.str_resume('Файлова операція закінчена'))
         else:
-            self.client_print(title=self.show_resume_action('Дія не обрана. Операція відмінена'))
+            self.client_print(conn=conn, title=self.str_resume('Дія не обрана. Операція відмінена'))
 
     # ---------------------------------------------------------------------------------------------------------------- #
     def save_list_book(self):
@@ -424,8 +519,8 @@ class Library:
         self.list_reader, self.max_reader_uin = self.storage.load(Reader.__name__)
         self._readerlist_saved = True
 
-        # ---------------------------------------------------------------------------------------------------------------- #
-    def give_out_book_to_reader(self):
+    # ---------------------------------------------------------------------------------------------------------------- #
+    def give_out_book_to_reader(self, conn: socket.socket):
         """
         Видати наявну в бібліотеці книгу зареєстрованому читачу
         Метод виводить перелік наявних книг та очікує вводу номеру книги, після чого виводить перелік всіх читачів та
@@ -434,34 +529,79 @@ class Library:
         :return: Нічого не вертає
         """
 
-        self.client_print(title=self.get_table_head('видача книги читачу', self.head_len, True), cls=True)
-        result = ''
-        showed_books = self.show_book_list(-1, False, True)
-        if showed_books:
-            value = self.client_print(input=True, question='Оберіть книгу, яку видати читачу на руки: ', ret_strip=True)
-            if value in showed_books:
-                book = self.list_book[self.get_bookpos_by_uin(showed_books[value])]
-                showed_readers = self.show_reader_list(0, False, True)
-                if showed_readers:
-                    value = self.client_print(input=True, question='Оберіть читача, якому видається книга: ', ret_strip=True)
-                    if value in showed_readers:
-                        reader = self.list_reader[self.get_readerpos_by_uin(showed_readers[value])]
-                        book.reader_uin = reader.uin
-                        result = f'Книга [{book}] видана читачу [{reader}]'
-                        self._booklist_saved = False
-                    else:
-                        result = 'Номер читача вказаний не коректно. Видача книги не можлива'
-                else:
-                    result = 'Відсутні зареєстровані читачі бібліотеки. Видача книги не можлива'
-                # ---------------------------------
+        """
+        Що може статися?
+        1. Книга, яку обрано для видачі читачу видалена або видана іншому
+        2. Читач, якого обрано длявидачі - видалений
+        """
+        def check_book(x_book:Book, prepare: bool):
+            """
+            Метод перевіряє результат пошуку книги, вертає рядок повідомлення про негаразд.
+            """
+            title = ''
+            if prepare:
+                fail = x_book is None
             else:
-                result = 'Номер книги вказаний не коректно. Видача книги не можлива'
-        else:
-            result = 'Немає доступних книг. Видача книги не можлива'
-        if result: self.client_print(title=result)
+                fail = x_book not in self.list_book
+            if fail:
+                title = f'Нажаль, книга [{x_book}] щойно була видалена іншим користувачем.{fail_str}'
+            elif x_book.reader_uin > 0:
+                # Якщо книгу встигли видати іншому
+                title = f'Нажаль, книга {x_book} щойно була видана іншому читачу. {fail_str}'
+            return title
+        # ------------------------------------
+
+        fail_str = "Видача книги не можлива"
+        self.client_print(conn=conn, title=self.str_head('видача книги читачу', self.head_len, True), cls=True)
+        # Вивели перелік книг, що на цей момент знаходяться в бібліотеці
+        showed_books = self.show_book_list(conn=conn, book_status=-1, cls=False, ret_showed=True)
+        if not showed_books:
+            # Інформацію про відсутність книг виведе метод show_book_list сам
+            return
+        # Запитали та отримали номер книги, яку хочемо віддати
+        value = self.client_print(conn=conn, input=True, question='Оберіть книгу, яку видати читачу на руки: ')
+        if value not in showed_books:
+            # Якщо отриманого значення (номеру) немає в виведеному переліку
+            self.client_print(conn=conn, title=f'Номер книги вказаний не коректно. {fail_str}')
+            return
+        # Взяли книгу (но період пошуку потоки заблоковані), яка на цей момент вже може бути виданою або видаленою.
+        book = self.get_book_by_uin(showed_books[value])
+        # ---------------- Попередня перевірка існування книги -----------------
+        title = check_book(book, True)
+        if title:
+            self.client_print(conn=conn, title=self.str_resume(f'{title} {fail_str}'))
+            return
+        # ----------------------------------------------------------
+        # Показали перелік всіх читачів
+        showed_readers = self.show_reader_list(conn=conn, reader_status=0, cls=False, ret_showed=True)
+        if not showed_readers:
+            # Інформацію про відсутність книг виведе метод show_reader_list сам
+            return
+        # Запитали номер читача, якому віддаємо книгу
+        value = self.client_print(conn=conn, input=True, question='Оберіть читача, якому видається книга: ')
+        if value not in showed_readers:
+            # Якщо отриманого значення (номеру) немає в виведеному переліку
+            self.client_print(conn=conn, title=f'Номер читача вказаний не коректно. {fail_str}')
+            return
+        # Взяли читача (но період пошуку потоки заблоковані), книга на цей момент вже знову може бути виданою, видаленою
+        # Також читач може бути видаленим
+        reader = self.get_reader_by_uin(showed_readers[value])
+        # --------- Остаточна перевірка наявності книги та читача ---------------------
+        self.lock.acquire()
+        title = check_book(book, False)
+        if not title:
+            if reader is None:
+                title = f'Нажаль, читач {reader} щойно був видалений іншим користувачем.{fail_str}'
+            else:
+                book.reader_uin = reader.uin
+                title = f'Книга [{book}] видана читачу [{reader}]'
+                self._booklist_saved = False
+        self.lock.release()
+        self.client_print(conn=conn, title=title)
+
 
     # ---------------------------------------------------------------------------------------------------------------- #
-    def accept_book_from_reader(self):
+    def accept_book_from_reader(self, conn:socket.socket):
         """
         Прийняти книгу від читача
         Метод виводить перелік читачів, у яких є книги на руках, очікує вводу номера.
@@ -471,37 +611,55 @@ class Library:
         :return: Нічого не вертає
         """
 
-        # Library.clear_screen()
-        # print(self.get_table_head('прийом книги від читача', self.head_len, True))
+        """
+        Що може статися?
+        1. По ідеї нічого не може, але може глюкнути база і читач або книга зникне, тому перевірки зроблю
+        """
 
-        self.client_print(title=self.get_table_head('прийом книги від читача', self.head_len, True), cls=True)
+        fail_str = 'Прийом книги не можливий'
+        self.client_print(conn=conn, title=self.str_head('прийом книги від читача', self.head_len, True), cls=True)
         result = ''
-        showed_readers = self.show_reader_list(1, False, True)
-        if showed_readers:
-            value = self.client_print(input=True, question='Введіть номер читача, від якого приймається книга: ', ret_strip=True)
-            # value = input('Введіть номер читача, від якого приймається книга: ')
-            if value in showed_readers:
-                reader = self.list_reader[self.get_readerpos_by_uin(showed_readers[value])]
-                reader_books = self.get_reader_books(reader.uin, 'list_book')
-                showed_books = self.show_book_list(0, False, True, reader_books, f'книг читача {reader}')
-                value = self.client_print(input=True, question='Оберіть книгу, яку необхідно прийняти від читача: ',ret_strip=True)
-                # value = input('Оберіть книгу, яку необхідно прийняти від читача: ')
-                if value in showed_books:
-                    book = reader_books[int(value) - 1]
-                    book.reader_uin = -1
-                    result = f'Читач [{reader}] здав книгу [{book}] в бібліотеку'
-                    self._booklist_saved = False
-                else:
-                    result = 'Номер книги вказаний не коректно. Прийом книги не можливий'
-            else:
-                result = 'Номер читача вказаний не коректно. Прийом книги не можливий'
-
-        else:
-            result = 'Відсутні читачі, які мають книги на руках. Прийом книги не можливий'
-        if result: self.client_print(title=result)
+        # Вивели перелік всіх книг, що на даний момент видані читачам
+        showed_readers = self.show_reader_list(conn=conn, reader_status=1, cls=False,ret_showed=True)
+        if not showed_readers:
+            # Якщо перелік не був виведений - повідомлення напише сам list(
+            return
+        # Запитали номер читача, який здає книгу
+        value = self.client_print(conn=conn, input=True,
+                                  question='Введіть номер читача, від якого приймається книга: ')
+        if value not in showed_readers:
+            self.client_print(conn=conn, title=f'Номер читача вказаний не коректно. {fail_str}')
+            return
+        # Отримали читача з переліку (На момент пошуку потоки зупинені).
+        # Поки в нього книги є - видалити його не можна, тому він точно є
+        reader = self.get_reader_by_uin(showed_readers[value])
+        # ----------- Перша тупа перевірка на глюк ---------
+        if reader is None:
+            self.client_print(conn=conn, title=f'Неочікуваний збій даних. Обраний читач не знайдений. {fail_str}')
+            return
+        # Отримали перелік книг, що видані цьому читачу (на момент пошуку потоки зупинені)
+        reader_books = self.get_reader_books(reader.uin, 'list_book')
+        # Вивели перелік всіх книг, що знаходяться у читача
+        showed_books = self.show_book_list(conn=conn, book_status=0, cls=False, ret_showed=True,
+                                           target_list=reader_books, title=f'книг читача {reader}')
+        value = self.client_print(conn=conn, input=True,
+                                  question='Оберіть книгу, яку необхідно прийняти від читача: ')
+        if value not in showed_books:
+            self.client_print(conn=conn, title=f'Номер книги вказаний не коректно. {fail_str}')
+            return
+        # З виданою книгою нічого не може відбутися, тому блокування не потрібне
+        book = reader_books[int(value) - 1]
+        # ----------- Перша тупа перевірка на глюк ---------
+        if book is None:
+            self.client_print(conn=conn, title=f'Неочікуваний збій даних. Обрана книга не знайдена. {fail_str}')
+            return
+        # Змінюється точно існуючий об'єкт, тому блокування не потрібно
+        book.reader_uin = -1
+        self.client_print(conn=conn, title=f'Читач [{reader}] здав книгу [{book}] в бібліотеку')
+        self._booklist_saved = False
 
     # ---------------------------------------------------------------------------------------------------------------- #
-    def show_book_list(self, book_status: int = None, cls: bool = True, ret_showed: bool = False,
+    def show_book_list(self, conn:socket.socket, book_status: int = None, cls: bool = True, ret_showed: bool = False,
                        target_list: list = None, title: str = ''):
         """
         Метод виводить на екран таблицю з книгами
@@ -518,7 +676,10 @@ class Library:
                  порядковий номер книги у виведеному переліку, а значення - uin цієї книги
         """
 
-        # --------------------------------------*---------------
+        """
+        Блокуваня ніяких не добавляв тому що заграло вже, а ще сортування робити
+        """
+        # -----------------------------------------------------
         def get_max_lens(target: list):
             """
             Допоміжний метод вичисляє максимальні довжини назви та автора книги
@@ -535,7 +696,7 @@ class Library:
                 x_max_title = tl if tl > x_max_title else x_max_title
             return x_max_author, x_max_title
 
-        # --------------------------------------*---------------
+        # -----------------------------------------------------
         def select_book_type(x_cls: bool):
             """
             Допоміжний метод додаткового вибору типу переліку
@@ -548,42 +709,49 @@ class Library:
                 '2': 'Виводити тільки ті книги, які видані читачам',
                 '3': 'Виводити тільки ті книги, що знаходяться в бібліотеці (не видані читачам) ',
             }
-            value = self.select_menu(title='ВИБІР КАТЕГОРІЇ КНИГ ДЛЯ ВИВОДУ', cls=x_cls, menu=menu, question='Оберіть категорію книг: ')
-            if value is not None:
+            value = self.select_menu(conn=conn, title='ВИБІР КАТЕГОРІЇ КНИГ ДЛЯ ВИВОДУ', cls=x_cls, menu=menu,
+                                     question='Оберіть категорію книг: ')
+            if value in menu:
                 return 0 if value == '1' else -1 if value == '3' else 1
             # --------------------------------------*---------------
 
         # ----- Розширення для будь-якого переліку книг ----- #
         if target_list is None:
+            # Якщо перелік не передавався - використовуємо базовий перелік книг
             target_list = self.list_book
         else:
+            # Якщо перелік передавався - примусово будемо виводити всі книги
             book_status = 0
         # ----- Визначаємося з типом переліку книг -----
         if book_status is None:
+            # Якщо тип книг не передавався
             if not self.list_book:
+                # Якщо книг в бібліотеці немає - для подальшого повідомлення "Всі книги"
                 book_status = 0
             else:
+                # Якщо книги в бібліотеці є - додатково обираємо їх тип
                 book_status = select_book_type(cls)
                 if book_status is None:
-                    self.client_print(title='Категорія переліку не обрана, перелік не буде виведений')
+                    self.client_print(conn=conn, title='Категорія переліку не обрана, перелік не буде виведений')
                     return
         # ----- Вичисляємо геометрію таблиці -----
         max_author, max_title = get_max_lens(target_list)
         max_num = len(str(self.max_book_uin))
-        # ------------
+        # ---- Формується заголовок таблиці --------
         if title == '':
-            str_status = 'всіх книг' if book_status == 0 else 'книг, що видані читачам' if book_status > 0 else 'книг, що знаходяться в бібліотеці'
+            str_status = 'всіх книг' if book_status == 0 else \
+                'книг, що видані читачам' if book_status > 0 else 'книг, що знаходяться в бібліотеці'
         else:
             str_status = title
         # ------------
         total_len = 2 + max_num + 3 + max_author + 3 + max_title + 3 + 6
-        s_title = self.get_table_head(f'перелік {str_status}', total_len, True)
+        s_title = self.str_head(f'перелік {str_status}', total_len, True)
         # ----- Для випадку коли треба повернути перелік uin виведених книг ----- #
         showed_books = {}
         # ----- Нічого не робимо, якщо книг немає -----
         if not target_list:
             list_msg = ['В бібліотеці немає книг',f'{"-" * (total_len)}']
-            self.client_print(title=s_title, cls=cls, x_list=list_msg)
+            self.client_print(conn=conn, title=s_title, cls=cls, x_list=list_msg)
             return showed_books if ret_showed else None
         # ----- Вивод переліку -----
         book_pos = 0
@@ -600,12 +768,12 @@ class Library:
                 str_status = 'книг '
             list_msg.append(f'{str_status} немає'.capitalize())
         list_msg.append(f'{"-" * (total_len)}')
-        self.client_print(title=s_title, cls=cls, x_list=list_msg)
+        self.client_print(conn=conn, title=s_title, cls=cls, x_list=list_msg)
         if ret_showed:
             return showed_books
 
     # ---------------------------------------------------------------------------------------------------------------- #
-    def show_reader_list(self, reader_status: int = None, cls:bool = True, ret_showed:bool = False):
+    def show_reader_list(self, conn:socket.socket, reader_status: int = None, cls:bool = True, ret_showed:bool = False):
         """
         Метод виводить на екран таблицю з читачами
 
@@ -618,6 +786,10 @@ class Library:
         :param ret_showed: Ознака того, що необхідно повернути перелік uin виведених в консоль книг
         :return: Якщо вказаний параметр ret_showed = True - вертає словник виведених читачів в якому ключ - це
                  порядковий номер книги у виведеному переліку, а значення - uin цього читача
+        """
+
+        """
+        Блокуваня ніяких не добавляв тому що заграло вже, а ще сортування робити
         """
 
         # --------------------------------------------------------------
@@ -647,7 +819,8 @@ class Library:
                 '2': 'Виводити тільки тих читачів, які мають книги на руках',
                 '3': 'Виводити тільки тих читачів, які не мають книг на руках',
             }
-            value = self.select_menu(title='ВИБІР КАТЕГОРІї ЧИТАЧІВ ДЛЯ ВИВОДУ', cls=x_cls, menu=menu, question='Оберіть категорію читачів: ')
+            value = self.select_menu(conn=conn, title='ВИБІР КАТЕГОРІї ЧИТАЧІВ ДЛЯ ВИВОДУ', cls=x_cls, menu=menu,
+                                     question='Оберіть категорію читачів: ')
             if value is not None:
                 return 0 if value == '1' else -1 if value == '3' else 1
 
@@ -658,7 +831,7 @@ class Library:
             else:
                 reader_status = select_reader_type(cls)
                 if reader_status is None:
-                    self.client_print(title='Категорія переліку не обрана, перелік не буде виведений')
+                    self.client_print(conn=conn, title='Категорія переліку не обрана, перелік не буде виведений')
                     # print('Категорія переліку не обрана, перелік не буде виведений')
                     return
         # ----- Вичисляємо геометрію таблиці -----
@@ -667,13 +840,13 @@ class Library:
         str_status = 'всіх читачів' if reader_status == 0 else 'читачів, що мають на руках книги' if reader_status > 0 else 'читачів, що не мають на руках книг'
         count_len = len(str(len(self.list_book)))
         total_len = 2 + max_num + 3 + max_name + 16 + count_len + 2
-        s_title = self.get_table_head(f'перелік {str_status}', total_len, True)
+        s_title = self.str_head(f'перелік {str_status}', total_len, True)
         # ----- Для випадку коли треба повернути перелік uin виведених читачів ----- #
         showed_readers = {}
         # ----- Нічого не робимо, якщо книг немає -----
         if not self.list_reader:
             list_msg = [f'У бібліотеки немає читачів', "-" * (total_len)]
-            self.client_print(title=s_title, cls=True, x_list=list_msg)
+            self.client_print(conn=conn, title=s_title, cls=True, x_list=list_msg)
             return showed_readers if ret_showed else None
         # ----- Вивод переліку -----
         reader_pos = 0
@@ -693,7 +866,7 @@ class Library:
             if reader_status == 0: str_status = 'читачів'
             list_msg.append(f'{str_status} немає'.capitalize())
         list_msg.append(f'{"-" * (total_len)}')
-        self.client_print(title=s_title, cls=cls, x_list=list_msg)
+        self.client_print(conn=conn, title=s_title, cls=cls, x_list=list_msg)
         if ret_showed:
             return showed_readers
 
@@ -714,6 +887,7 @@ class Library:
             return
         reader_books = []
         count = 0
+        self.lock.acquire()
         for book in self.list_book:
             if book.reader_uin == reader_uin:
                 if ret_type == 'count':
@@ -722,38 +896,34 @@ class Library:
                     reader_books.append(book.uin)
                 else:
                     reader_books.append(book)
+        self.lock.release()
         if ret_type == 'count':
             return count
         else:
             return reader_books
 
     # ---------------------------------------------------------------------------------------------------------------- #
-    def before_exit(self):
+    def before_client_exit(self, conn:socket.socket):
         """
-        Метод перед завершенням роботи пропонує зберегти змінені переліки книг та читачів
+        Тепер це не закриття бібліотеки, а закриття одного клієнта
+        Якщо я буду мати в бібліотеці перелік всіх клієнтів, то під час закриття з ним
+        з'єднання - елемент переліку з ним має видалятися. Значить має бути ідентифікатор
+        з'єднання, який сюда має бути переданий. Як це зробити ?
+        Використаю для цього id(conn). У переліка є метод remove, що видаляє елемент з першим
+        вказаним значенням, а так як всі id унікальні - воно буде єдиним
+        ----------------------------------------------------------------------------
+        Функціонал перепитування не збережених баз тут ні до чого. Куди його перенести - поки що не
+        знаю, скоріше за все - нахєр
+        ----------------------------------------------------------------------------
 
         :return: Нічого не вертає
         """
-
-        b_title_out = False
-        title = self.get_table_head('завершення роботи бібліотеки', self.head_len, True)
-        if not self._booklist_saved:
-            b_title_out = True
-            value = self.client_print(title=title, cls=True, input=True,
-                                    question='База даних книг не збережена. Для її збереження ведіть що небудь: ')
-            if tls.check_value(value):
-                self.save_list_book()
-        if not self._readerlist_saved:
-            if b_title_out: title = ''
-            value = self.client_print(title=title, cls = not b_title_out, input=True,
-                                      question='База даних читачів не збережена. Для її збереження ведіть що небудь: ')
-            if tls.check_value(value):
-                self.save_list_reader()
-        self.client_print(title=self.show_resume_action('Бібліотека зачинена'), exit=True)
-
+        title = self.str_head('Клієнт покинув бібліотеку', self.head_len, True)
+        self.client_print(conn=conn, title=title, cls=True, exit=True)
+        self.change_list_clients(conn)
 
     # ---------------------------------------------------------------------------------------------------------------- #
-    def sort_list_book(self):
+    def sort_list_book(self, conn:socket.socket):
         """
          Метод забезпечує вибір параметру та напрямку сортування переліку книг, сортування за вивід результату
 
@@ -770,20 +940,21 @@ class Library:
                     '6': 'За послідовністю введення в базу',
                     '7': 'За номером читача',
             }
-            sort_categoty = self.select_menu(title='сортування переліку книг',menu=menu,question='Оберіть категорію сортування: ')
+            sort_categoty = self.select_menu(conn=conn, title='сортування переліку книг',menu=menu,question='Оберіть категорію сортування: ')
             if sort_categoty is None:
-                self.client_print(title=self.show_resume_action('Категорія сортування обрана не коректно. Сортування не можливе.'))
+                self.client_print(conn=conn, title=self.str_resume('Категорія сортування обрана не коректно. Сортування не можливе.'))
                 return
             # ----- Вибір напрямку сортування ----- #
             menu = {'1': 'За наростанням',
                     '2': 'За зменшенням'
                     }
-            sort_reverse = self.select_menu(menu=menu, question='Оберіть напрямок сортування: ')
+            sort_reverse = self.select_menu(conn=conn, menu=menu, question='Оберіть напрямок сортування: ')
             if sort_reverse is None:
-                self.client_print(title=self.show_resume_action('Напрямок сортування обраний не коректно. Сортування не можливе.'))
+                self.client_print(conn=conn, title=self.str_resume('Напрямок сортування обраний не коректно. Сортування не можливе.'))
                 return
             sort_reverse = sort_reverse == '2'
             # ----- Сортування ----- #
+            self.lock.acquire()
             if sort_categoty == '1':
                 self.list_book.sort(key=lambda x: x.title, reverse=sort_reverse)
             elif sort_categoty == '2':
@@ -798,19 +969,20 @@ class Library:
                 self.list_book.sort(key=lambda x: x.uin, reverse=sort_reverse)
             else:
                 self.list_book.sort(key=lambda x: x.reader_uin, reverse=sort_reverse)
+            self.lock.release()
 
-            value = self.client_print(title=self.show_resume_action('Перелік книг відсортований'), input=True,
-                              question='Для вивода переліку всіх книг введіть що небудь: ', ret_strip=True,)
+            value = self.client_print(conn=conn, title=self.str_resume('Перелік книг відсортований'), input=True,
+                              question='Для вивода переліку всіх книг введіть що небудь: ')
             self._booklist_saved = False
             if value:
-                self.show_book_list(0)
-            result = self.show_resume_action('Сортування завершено.')
+                self.show_book_list(conn=conn, book_status=0)
+            result = self.str_resume('Сортування завершено.')
         else:
-            result = self.show_resume_action('База даних книг бібліотеки порожня. Сортування не можливе.')
-        self.client_print(title=result)
+            result = self.str_resume('База даних книг бібліотеки порожня. Сортування не можливе.')
+        self.client_print(conn=conn, title=result)
 
 
-    def sort_list_readers(self):
+    def sort_list_readers(self, conn:socket.socket):
         """
         Метод забезпечує вибір параметру та напрямку сортування переліку читачів, сортування за вивід результату
 
@@ -824,20 +996,22 @@ class Library:
                     '4': 'За послідовністю введення в базу',
                     '5': 'За кількістю книг на руках',
                     }
-            sort_categoty = self.select_menu(title='сортування переліку читачів', menu=menu, question='Оберіть категорію сортування: ')
+            sort_categoty = self.select_menu(conn=conn, title='сортування переліку читачів', menu=menu,
+                                             question='Оберіть категорію сортування: ')
             if sort_categoty is None:
-                self.client_print(title=self.show_resume_action('Категорія сортування обрана не коректно. Сортування не можливе.'))
+                self.client_print(conn=conn, title=self.str_resume('Категорія сортування обрана не коректно. Сортування не можливе.'))
                 return
             # ----- Вибір напрямку сортування ----- #
             menu = {'1': 'За наростанням',
                     '2': 'За зменшенням'
                     }
-            sort_reverse = self.select_menu(menu=menu, question='Оберіть напрямок сортування')
+            sort_reverse = self.select_menu(conn=conn, menu=menu, question='Оберіть напрямок сортування: ')
             if sort_reverse is None:
-                self.client_print(title=self.show_resume_action('Напрямок сортування обраний не коректно. Сортування не можливе.'))
+                self.client_print(conn=conn, title=self.str_resume('Напрямок сортування обраний не коректно. Сортування не можливе.'))
                 return
             sort_reverse = sort_reverse == '2'
             # ----- Сортування ----- #
+            self.lock.acquire()
             if sort_categoty == '1':
                 self.list_reader.sort(key=lambda x: x.name, reverse=sort_reverse)
             elif sort_categoty == '2':
@@ -848,15 +1022,14 @@ class Library:
                 self.list_reader.sort(key=lambda x: x.uin, reverse=sort_reverse)
             else :
                 self.list_reader.sort(key=lambda x: self.get_reader_books(x.uin,'count'), reverse=sort_reverse)
-            result = 'Перелік читачів відсортований'
-            # self.show_resume_action('Перелік читачів відсортований')
+            self.lock.release()
+
             self._readerlist_saved = False
-            # value = input('Для вивода переліку всіх читачів введіть що небудь: ').strip()
-            value = self.client_print(title=self.show_resume_action('Перелік читачів відсортований'), input=True,
-                                      question='Для вивода переліку всіх читачів введіть що небудь: ', ret_strip=True)
+            value = self.client_print(conn=conn, title=self.str_resume('Перелік читачів відсортований'), input=True,
+                                      question='Для вивода переліку всіх читачів введіть що небудь: ')
             if value:
-                self.show_reader_list(0)
-            result = self.show_resume_action('Сортування завершено.')
+                self.show_reader_list(conn=conn, reader_status=0)
+            result = self.str_resume('Сортування завершено.')
         else:
-            result = self.show_resume_action('База даних читачів бібліотеки порожня. Сортування не можливе.')
-        self.client_print(title=result)
+            result = self.str_resume('База даних читачів бібліотеки порожня. Сортування не можливе.')
+        self.client_print(conn=conn, title=result)
